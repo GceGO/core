@@ -59,7 +59,10 @@
         "laravel": {
             "providers": [
                 "Gcego\\Core\\GcegoServiceProvider"
-            ]
+            ],
+            "aliases": {
+                "Gcego": "Gcego\\Core\\Facades\\Gcego"
+            }
         }
     },
     "config": {
