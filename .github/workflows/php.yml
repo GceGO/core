@@ -1,39 +1,56 @@
-name: PHP Composer
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
+    tags: ['v*']
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  build:
-
+  tests:
+    name: PHP ${{ matrix.php }} (${{ matrix.dependencies }} dependencies)
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        dependencies: [highest]
+        include:
+          - php: '8.3'
+            dependencies: lowest
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Validate composer.json and composer.lock
-      run: composer validate --strict
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
 
-    - name: Cache Composer packages
-      id: composer-cache
-      uses: actions/cache@v3
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-lock
 
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress ${{ matrix.dependencies == 'lowest' && '--prefer-lowest --prefer-stable' || '' }}
 
-    # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
-    # Docs: https://getcomposer.org/doc/articles/scripts.md
+      - name: Check formatting
+        if: matrix.php == '8.5' && matrix.dependencies == 'highest'
+        run: vendor/bin/pint --test
 
-    # - name: Run test suite
-    #   run: composer run-script test
+      # Lowest dependencies prove that Core runs on the oldest supported
+      # releases; analysis and advisories are only meaningful on current ones.
+      - name: Static analysis
+        if: matrix.dependencies == 'highest'
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: Tests
+        run: vendor/bin/pest
+
+      - name: Security advisories
+        if: matrix.dependencies == 'highest'
+        run: composer audit
